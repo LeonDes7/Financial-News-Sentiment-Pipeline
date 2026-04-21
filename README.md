@@ -24,8 +24,6 @@ This project demonstrates the ability to handle live API traffic, guarantee faul
 5. **Analytics Dashboard:** A Streamlit web application queries the dbt schema to display real-time pipeline metrics, sentiment distribution, and a live rolling news feed.
 
 ## Project Structure
-Code output
-README.md without emojis generated successfully.
 
 ```text
 financial-sentiment-pipeline/
