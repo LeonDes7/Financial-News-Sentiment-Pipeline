@@ -1,0 +1,20 @@
+# Secrets
+.env
+profiles.yml
+
+# Virtual Environment
+venv/
+env/
+*.env
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# dbt specific folders
+news_analytics/target/
+news_analytics/dbt_packages/
+news_analytics/logs/
+
+# Airflow Logs
+logs/

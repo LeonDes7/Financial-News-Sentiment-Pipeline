@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: dim_articles
+    description: "Dimension table containing article attributes."
+    columns:
+      - name: article_id
+        tests:
+          - unique
+          - not_null
+      - name: article_headline
+        tests:
+          - not_null
+
+  - name: fact_sentiment
+    description: "Fact table containing sentiment metrics and timestamps."
+    columns:
+      - name: article_id
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_articles')
+              field: article_id
+      - name: sentiment_score
+        tests:
+          - not_null
+      - name: published_timestamp
+        tests:
+          - not_null
+      - name: sentiment_category
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Positive", "Negative", "Neutral"]
