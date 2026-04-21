@@ -25,3 +25,21 @@ This project demonstrates the ability to handle live API traffic, guarantee faul
 5. **Analytics Dashboard:** A Streamlit web application queries the dbt schema to display real-time pipeline metrics, sentiment distribution, and a live rolling news feed.
 
 ## Project Structure
+Code output
+README.md without emojis generated successfully.
+
+```text
+financial-sentiment-pipeline/
+├── dags/                           # Airflow DAGs for scheduling
+│   └── financial_news_dag.py
+├── news_analytics/                 # dbt project folder
+│   ├── models/
+│   │   ├── staging/stg_news.sql
+│   │   ├── core/dim_articles.sql
+│   │   └── core/fact_sentiment.sql
+│   └── schema.yml                  # dbt data quality tests
+├── producer.py                     # Finnhub API to Kafka script
+├── consumer.py                     # Kafka to PostgreSQL sentiment script
+├── dashboard.py                    # Streamlit visualization app
+├── docker-compose.yml              # Container infrastructure
+└── requirements.txt                # Python dependencies
