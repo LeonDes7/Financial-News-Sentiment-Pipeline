@@ -1,4 +1,3 @@
-markdown_content = """# Real-Time Financial News Sentiment Pipeline
 
 ![Dashboard Screenshot](image_0216d4.jpg)
 
