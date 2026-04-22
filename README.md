@@ -38,6 +38,7 @@ financial-sentiment-pipeline/
 ├── producer.py                     # Finnhub API to Kafka script
 ├── consumer.py                     # Kafka to PostgreSQL sentiment script
 ├── dashboard.py                    # Streamlit visualization app
+├── check_throughput.py             # Database row count & throughput monitoring
 ├── docker-compose.yml              # Container infrastructure
 └── requirements.txt                # Python dependencies
 
