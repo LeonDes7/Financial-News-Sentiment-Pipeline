@@ -1,6 +1,6 @@
 # Real-Time Financial News Sentiment Pipeline
 
-![Dashboard Screenshot](image_0216d4.jpg)
+![Dashboard Screenshot](<img width="2554" height="1205" alt="185803" src="https://github.com/user-attachments/assets/370094ad-892b-4643-982a-a59eff4b9151" />)
 
 ## Overview
 An end-to-end streaming data engineering pipeline designed to ingest, process, and visualize the sentiment of live financial news. The system reads real-time market articles, mathematically calculates their sentiment (positive/negative/neutral), and models the data into a production-ready Star Schema for immediate visualization. 
