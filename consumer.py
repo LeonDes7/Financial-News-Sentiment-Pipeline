@@ -1,5 +1,6 @@
-import json
 import os
+import json
+import time 
 import psycopg2
 from confluent_kafka import Consumer
 from textblob import TextBlob
@@ -50,11 +51,14 @@ def run_consumer():
     try:
         while True:
             msg = consumer.poll(1.0)
+            
             if msg is None:
                 continue
             if msg.error():
                 print(f"Consumer error: {msg.error()}")
                 continue
+
+            start_time = time.time()
 
             data = json.loads(msg.value().decode('utf-8'))
             
@@ -67,7 +71,11 @@ def run_consumer():
             """
             cur.execute(insert_query, (data['id'], data['headline'], score, data['timestamp']))
             conn.commit()
-            print(f"Stored article {data['id']} with score {score}")
+
+
+            end_time = time.time()
+            
+            print(f"Stored article {data['id']} | Score: {score:.2f} | Latency: {end_time - start_time:.4f} seconds")
 
     except KeyboardInterrupt:
         pass

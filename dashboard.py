@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 import os
+import time 
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,24 +25,27 @@ def init_connection():
 conn = init_connection()
 
 
-@st.cache_data(ttl=10)
 def load_data():
     query = """
     SELECT 
-        d.article_headline,
-        f.sentiment_score,
-        f.sentiment_category,
-        to_timestamp(f.published_timestamp) as published_at
-    FROM fact_sentiment f
-    JOIN dim_articles d ON f.article_id = d.article_id
-    ORDER BY f.published_timestamp DESC;
+        headline as article_headline,
+        sentiment_score,
+        CASE 
+            WHEN sentiment_score > 0 THEN 'Positive'
+            WHEN sentiment_score < 0 THEN 'Negative'
+            ELSE 'Neutral'
+        END as sentiment_category,
+        to_timestamp(event_timestamp) as published_at
+    FROM news_sentiment
+    ORDER BY event_timestamp DESC
+    LIMIT 1000;
     """
     return pd.read_sql(query, conn)
 
 df = load_data()
 
 if df.empty:
-    st.warning("No data found. Make sure your Airflow pipeline and Kafka consumer are running!")
+    st.warning("No data found. Make sure your pipeline and Kafka consumer are running!")
 else:
     st.subheader("Live Pipeline Metrics")
     col1, col2, col3 = st.columns(3)
@@ -67,3 +71,7 @@ else:
             use_container_width=True,
             hide_index=True
         )
+
+
+time.sleep(3)
+st.rerun()
