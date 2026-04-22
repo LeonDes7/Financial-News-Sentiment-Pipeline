@@ -1,3 +1,4 @@
+# Real-Time Financial News Sentiment Pipeline
 
 ![Dashboard Screenshot](image_0216d4.jpg)
 
@@ -18,13 +19,12 @@ This project demonstrates the ability to handle live API traffic, guarantee faul
 
 ## Pipeline Workflow
 1. **Data Ingestion:** An Airflow DAG runs on an hourly schedule, triggering a Python producer that fetches live market news.
-2. **Streaming:** The producer pushes raw articles to a Kafka topic (`financial_news`), guaranteeing fault-tolerant delivery.
-3. **Stream Processing:** A Python consumer constantly listens to the Kafka topic, calculates a sentiment score for each headline on the fly, and lands the structured results into PostgreSQL. Exactly-once delivery is enforced via primary key constraints (`article_id`).
-4. **Data Modeling & Testing:** dbt transforms the raw ingestion tables into a clean Star Schema (`fact_sentiment` and `dim_articles`). It enforces pipeline observability using automated data quality tests (uniqueness, not-null, referential integrity).
+2. **Streaming:** The producer pushes raw articles to a Kafka topic (`financial_news`). This step automatically initializes the topic in the broker.
+3. **Stream Processing:** A Python consumer listens to the Kafka topic, calculates a sentiment score for each headline on the fly, and lands the structured results into PostgreSQL. Exactly-once delivery is enforced via primary key constraints.
+4. **Data Modeling & Testing:** dbt transforms the raw ingestion tables into a clean Star Schema (`fact_sentiment` and `dim_articles`). It enforces pipeline observability using automated data quality tests.
 5. **Analytics Dashboard:** A Streamlit web application queries the dbt schema to display real-time pipeline metrics, sentiment distribution, and a live rolling news feed.
 
 ## Project Structure
-
 ```text
 financial-sentiment-pipeline/
 ├── dags/                           # Airflow DAGs for scheduling
@@ -41,11 +41,13 @@ financial-sentiment-pipeline/
 ├── docker-compose.yml              # Container infrastructure
 └── requirements.txt                # Python dependencies
 
-## Execution Guide (Manual Startup)
-
-To run this pipeline on your local machine, it is highly recommended to follow this specific order of operations. This ensures that Kafka topics and PostgreSQL tables are initialized in the correct sequence.
-
-### 1. Start Infrastructure
-Ensure Docker Desktop is running, then start the containers:
-```bash
-docker-compose up -d
+```
+## How to Run Locally
+```
+1. Clone the repository and install dependencies
+git clone [https://github.com/LeonDes7/Financial-News-Sentiment-Pipeline.git](https://github.com/LeonDes7/Financial-News-Sentiment-Pipeline.git)
+cd Financial-News-Sentiment-Pipeline
+python -m venv venv
+source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+pip install -r requirements.txt
+```
