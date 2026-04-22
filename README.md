@@ -71,9 +71,9 @@ Wait about 15-20 seconds for the Airflow webserver and Kafka broker to fully ini
 ## 4. Trigger Data Ingestion (Create Kafka Topic)
 Before starting the consumer, we must send at least one message to Kafka to create the financial_news topic.
 
-* **Navigate to the Airflow UI at http://localhost:8080 (Login: airflow / airflow).
-* ** Unpause the financial_news_ingestion DAG.
-* **Click the "Play" button to manually trigger a run.
+* Navigate to the Airflow UI at http://localhost:8080 (Login: airflow / airflow).
+* Unpause the financial_news_ingestion DAG.
+* Click the "Play" button to manually trigger a run.
 
 5. Start the Stream Processor (Populate Database)
 Once Airflow has fetched the first batch of news, open a terminal, activate your virtual environment, and start the Kafka consumer.
@@ -98,8 +98,8 @@ streamlit run dashboard.py
 Navigate to http://localhost:8501 to view the live dashboard.
 
 ## Troubleshooting & Clean Up
-Database Connection Issues: If the dashboard shows a relation "fact_sentiment" does not exist error, it means the database was recently restarted and is empty. Ensure data is flowing via Airflow and the Consumer (Steps 4 and 5), then run dbt run inside the news_analytics folder to rebuild the schema.
+*Database Connection Issues: If the dashboard shows a relation "fact_sentiment" does not exist error, it means the database was recently restarted and is empty. Ensure data is flowing via Airflow and the Consumer (Steps 4 and 5), then run dbt run inside the news_analytics folder to rebuild the schema.
 
-Kafka Connection Errors: If you see errors like Connect to ipv6#[::1]:9094 failed in your consumer terminal, ensure your .env file uses the explicit IPv4 address: KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9094 instead of localhost.
+*Kafka Connection Errors: If you see errors like Connect to ipv6#[::1]:9094 failed in your consumer terminal, ensure your .env file uses the explicit IPv4 address: KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9094 instead of localhost.
 
-Stopping the Pipeline: Press Ctrl + C in your terminal windows to stop the Python scripts. Run docker-compose down to cleanly spin down the background infrastructure.
+*Stopping the Pipeline: Press Ctrl + C in your terminal windows to stop the Python scripts. Run docker-compose down to cleanly spin down the background infrastructure.
