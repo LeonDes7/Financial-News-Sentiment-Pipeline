@@ -43,11 +43,63 @@ financial-sentiment-pipeline/
 
 ```
 ## How to Run Locally
-```
 1. Clone the repository and install dependencies
+```
 git clone [https://github.com/LeonDes7/Financial-News-Sentiment-Pipeline.git](https://github.com/LeonDes7/Financial-News-Sentiment-Pipeline.git)
 cd Financial-News-Sentiment-Pipeline
 python -m venv venv
 source venv/bin/activate  # On Windows use `venv\Scripts\activate`
 pip install -r requirements.txt
 ```
+
+## 2. Configure Environment Variables
+Create a hidden .env file in the root directory to store your API keys and database credentials:
+```
+FINNHUB_API_KEY=your_api_key_here
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=news_db
+KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9094
+```
+
+## 3. Start Infrastructure
+Ensure Docker Desktop is running, then start the background containers:
+```
+docker-compose up -d
+```
+Wait about 15-20 seconds for the Airflow webserver and Kafka broker to fully initialize.
+## 4. Trigger Data Ingestion (Create Kafka Topic)
+Before starting the consumer, we must send at least one message to Kafka to create the financial_news topic.
+
+* **Navigate to the Airflow UI at http://localhost:8080 (Login: airflow / airflow).
+* ** Unpause the financial_news_ingestion DAG.
+* **Click the "Play" button to manually trigger a run.
+
+5. Start the Stream Processor (Populate Database)
+Once Airflow has fetched the first batch of news, open a terminal, activate your virtual environment, and start the Kafka consumer.
+```
+python consumer.py
+```
+Leave this terminal window open. Wait until you see "Stored article..." printed in the console, confirming that raw data has landed in PostgreSQL.
+
+## 6. Initialize Data Warehouse (dbt)
+Now that raw data exists, we can build the analytical tables. Open a new terminal window:
+```
+cd news_analytics
+dbt run
+cd ..
+```
+
+## 7. Launch the Dashboard
+Finally, in that same terminal, start the Streamlit web application:
+```
+streamlit run dashboard.py
+```
+Navigate to http://localhost:8501 to view the live dashboard.
+
+## Troubleshooting & Clean Up
+Database Connection Issues: If the dashboard shows a relation "fact_sentiment" does not exist error, it means the database was recently restarted and is empty. Ensure data is flowing via Airflow and the Consumer (Steps 4 and 5), then run dbt run inside the news_analytics folder to rebuild the schema.
+
+Kafka Connection Errors: If you see errors like Connect to ipv6#[::1]:9094 failed in your consumer terminal, ensure your .env file uses the explicit IPv4 address: KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:9094 instead of localhost.
+
+Stopping the Pipeline: Press Ctrl + C in your terminal windows to stop the Python scripts. Run docker-compose down to cleanly spin down the background infrastructure.
