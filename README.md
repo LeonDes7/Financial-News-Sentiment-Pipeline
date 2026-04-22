@@ -1,4 +1,4 @@
-# Real-Time Financial News Sentiment Pipeline
+# Real-Time Financial Sentiment Engine
 
 <img width="2554" height="1205" alt="185803" src="https://github.com/user-attachments/assets/5fb58250-7950-489f-be0c-08598c26efc4" />
 
