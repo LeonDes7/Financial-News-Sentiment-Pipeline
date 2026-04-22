@@ -40,3 +40,12 @@ financial-sentiment-pipeline/
 ├── dashboard.py                    # Streamlit visualization app
 ├── docker-compose.yml              # Container infrastructure
 └── requirements.txt                # Python dependencies
+
+## Execution Guide (Manual Startup)
+
+To run this pipeline on your local machine, it is highly recommended to follow this specific order of operations. This ensures that Kafka topics and PostgreSQL tables are initialized in the correct sequence.
+
+### 1. Start Infrastructure
+Ensure Docker Desktop is running, then start the containers:
+```bash
+docker-compose up -d
