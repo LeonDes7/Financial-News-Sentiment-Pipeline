@@ -6,33 +6,40 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Cluster Connectivity Configuration
 config = {
-    'bootstrap.servers': 'kafka:9092', 
+    'bootstrap.servers': 'kafka:9092',  # Internal Docker bridge network broker address
     'client.id': 'news-producer'
 }
 
+# Instantiate the Kafka producer instance using the confluent-kafka C-based client bindings
 producer = Producer(config)
 
 def delivery_report(err, msg):
-    """Callback triggered by Kafka to check if message delivery succeeded or failed."""
+    """
+    Asynchronous delivery callback mechanism triggered by Kafka broker acknowledgments (ACKs).
+    Used to track structural message delivery or message drop issues without blocking the main event loop.
+    """
     if err is not None:
         print(f"Message delivery failed: {err}")
 
 def fetch_news():
-    """Fetches the latest general news from Finnhub."""
+    """Fetches raw transactional event data from the upstream external API."""
     api_key = os.getenv('FINNHUB_API_KEY')
     url = f'https://finnhub.io/api/v1/news?category=general&token={api_key}'
     
     try:
         response = requests.get(url)
-        response.raise_for_status() 
+        response.raise_for_status() # Network Guardrail: Throws an exception for 4xx/5xx HTTP errors
         return response.json()
     except Exception as e:
         print(f"Error fetching data from Finnhub: {e}")
         return []
 
 def main():
-    """Main execution function designed to run once per Airflow task trigger."""
+    """
+    Orchestration Task Target: Designed for stateless, episodic execution triggered hourly by Apache Airflow.
+    """
     print("Starting single-batch ingestion...")
     articles = fetch_news()
     
@@ -42,7 +49,7 @@ def main():
 
     success_count = 0
     for article in articles:
-        # Enforce schema
+        # Schema Enforcement Phase: Construct a normalized payload dictionary from raw json fields
         payload = {
             'id': article.get('id'),
             'headline': article.get('headline'),
@@ -51,6 +58,8 @@ def main():
         }
         
         try:
+            # Asynchronous Event Production: Append event records to the internal local thread accumulator buffer.
+            # Specifies the 'id' as the routing message key to guarantee partition grouping logic.
             producer.produce(
                 'financial_news',
                 key=str(payload['id']),
@@ -62,6 +71,8 @@ def main():
             print(f"Failed to queue message for article {payload.get('id')}: {e}")
     
     print(f"Flushing {success_count} articles to Kafka...")
+    # Synchronous Blocking Flush: Empties internal producer message queues and forces network transmission 
+    # to the cluster broker before letting the episodic execution context exit safely.
     producer.flush()
     print("Ingestion batch complete. Exiting script.")
 
