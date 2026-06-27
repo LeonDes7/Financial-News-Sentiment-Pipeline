@@ -1,9 +1,8 @@
-
 name: 'news_analytics'
 version: '1.0.0'
+config-version: 2
 
 profile: 'news_analytics'
-
 
 model-paths: ["models"]
 analysis-paths: ["analyses"]
@@ -16,7 +15,15 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
-
-# Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
-
+# FAANG Enterprise Data Modeling Configurations:
+# Enforces Incremental materialization and B-Tree timestamp clustering globally across warehouse models
+models:
+  news_analytics:
+    staging:
+      +materialized: view
+    core:
+      +materialized: incremental
+      +unique_key: article_id
+      +indexes:
+        - columns: ["event_timestamp"]
+          type: btree

@@ -14,13 +14,9 @@ st.markdown("Live dashboard powered by **Kafka, Apache Airflow, dbt, and Postgre
 
 @st.cache_resource
 def init_connection():
-    """
-    Connection Pooling Simulation: Utilizes Streamlit's caching mechanism to maintain
-    and reuse a persistent database TCP connection instead of instantiating connections on every rerun.
-    """
     return psycopg2.connect(
-        host="localhost",
-        port="5433",
+        host=os.getenv('POSTGRES_HOST', 'localhost'),
+        port=os.getenv('POSTGRES_PORT', '5433'),
         database=os.getenv('POSTGRES_DB'),
         user=os.getenv('POSTGRES_USER'),
         password=os.getenv('POSTGRES_PASSWORD')
@@ -83,5 +79,5 @@ else:
 
 # Web Sockets Emulation Protocol: Forces the execution frame to halt for 3 seconds 
 # before re-executing the code workspace, achieving automated, looping data refreshes.
-time.sleep(3)
+time.sleep(60)
 st.rerun()

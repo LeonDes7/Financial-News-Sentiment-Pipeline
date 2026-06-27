@@ -1,0 +1,19 @@
+# Ignore Airflow Logs (This is what caused your crash)
+logs/
+
+# Ignore Python Virtual Environments
+venv/
+env/
+
+# Ignore dbt artifacts
+news_analytics/target/
+news_analytics/dbt_packages/
+news_analytics/logs/
+
+# Ignore Python Cache
+__pycache__/
+*.pyc
+
+# Ignore secret files so they don't get hard-baked into the image
+.env
+profiles.yml

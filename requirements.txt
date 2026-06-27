@@ -1,5 +1,12 @@
 confluent-kafka
 requests
 psycopg2-binary
-textblob
+transformers>=4.46.0
 python-dotenv
+pydantic
+streamlit
+pandas
+SQLAlchemy
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.5.0

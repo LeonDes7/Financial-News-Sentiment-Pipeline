@@ -1,42 +1,98 @@
 import os
 import json
-import time 
+import time
 import psycopg2
-from confluent_kafka import Consumer
-from textblob import TextBlob
+import pandas as pd
+from confluent_kafka import Consumer, KafkaError
+from transformers import pipeline
 from dotenv import load_dotenv
+from pydantic import BaseModel, ValidationError
 
 load_dotenv()
 
-# Consumer Group Configuration Parameters
+class ArticlePayload(BaseModel):
+    id: int
+    headline: str
+    summary: str | None = None
+    timestamp: int
+
 kafka_config = {
-    'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS'), 
-    'group.id': 'sentiment-analysis-group', # Coordinates offset distribution across multiple scale-out consumers
-    'auto.offset.reset': 'earliest'          # Fault Tolerance: Automatically replays unread messages upon initialization
+    'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9094'),
+    'group.id': 'financial-sentiment-analysis-v2',
+    'auto.offset.reset': 'earliest',
+    'enable.auto.commit': False
 }
 
+print("Loading Financial BERT Transformer model into memory...")
+sentiment_pipeline = pipeline(
+    "sentiment-analysis",
+    model="ProsusAI/finbert",
+    device=-1
+)
+
+def run_ge_checkpoint(records: list[dict]) -> bool:
+    """
+    Enforces 5 Great Expectations-style data contracts on a batch of
+    raw Kafka ingestion records before PostgreSQL loading.
+    """
+    try:
+        df = pd.DataFrame(records)
+        violations = []
+
+        # Contract 1: id must never be null
+        if df["id"].isnull().any():
+            violations.append("expect_column_values_to_not_be_null: id")
+
+        # Contract 2: headline must never be null
+        if df["headline"].isnull().any():
+            violations.append("expect_column_values_to_not_be_null: headline")
+
+        # Contract 3: timestamp must be a positive integer
+        if (df["timestamp"] < 0).any():
+            violations.append("expect_column_values_to_be_between: timestamp >= 0")
+
+        # Contract 4: id must be unique within batch
+        if df["id"].duplicated().any():
+            violations.append("expect_column_values_to_be_unique: id")
+
+        # Contract 5: headline must be non-empty string
+        if (df["headline"].str.len() < 1).any():
+            violations.append("expect_column_value_lengths_to_be_between: headline >= 1")
+
+        if violations:
+            print(f"[GE CONTRACT VIOLATION] {len(violations)} expectation(s) failed:")
+            for v in violations:
+                print(f"  - {v}")
+            return False
+
+        print(f"[GE CHECKPOINT] All 5 data contracts passed on batch of {len(records)}.")
+        return True
+
+    except Exception as e:
+        print(f"[GE ERROR] Validation failed with exception: {e}")
+        return False
+
 def get_db_connection():
-    """Establishes a dedicated physical TCP session link connection to the target PostgreSQL Operational Data Store."""
     return psycopg2.connect(
-        host="localhost",
-        port="5433",
+        host=os.getenv('POSTGRES_HOST', 'localhost'),
+        port=os.getenv('POSTGRES_PORT', '5433'),
         database=os.getenv('POSTGRES_DB'),
         user=os.getenv('POSTGRES_USER'),
         password=os.getenv('POSTGRES_PASSWORD')
     )
 
 def init_db():
-    """DB Bootstrapping: Generates structural storage tables if missing to guarantee initial write execution paths."""
     conn = get_db_connection()
     cur = conn.cursor()
-    # Schema Definition: Defines strict constraints including explicit data types and an explicit primary identity key
     cur.execute("""
         CREATE TABLE IF NOT EXISTS news_sentiment (
-            article_id BIGINT PRIMARY KEY,
+            article_id BIGINT,
             headline TEXT,
             sentiment_score FLOAT,
-            event_timestamp BIGINT
+            event_timestamp BIGINT,
+            PRIMARY KEY (article_id, event_timestamp)
         );
+        CREATE INDEX IF NOT EXISTS idx_news_timestamp ON news_sentiment (event_timestamp DESC);
     """)
     conn.commit()
     cur.close()
@@ -45,53 +101,83 @@ def init_db():
 def run_consumer():
     init_db()
     consumer = Consumer(kafka_config)
-    consumer.subscribe(['financial_news']) # Map stream context explicitly to our target pub/sub topic channel
-    
+    consumer.subscribe(['financial_news'])
+
     conn = get_db_connection()
     cur = conn.cursor()
 
-    print("Consumer started. Listening for messages...")
+    print("FinBERT Consumer Active. Processing live pipeline streams...")
+
+    ge_batch = []
+    GE_BATCH_SIZE = 10
 
     try:
         while True:
-            # Continuous Streaming Polling Loop: Query the message cluster channel for new entries with a 1.0 second timeout window
-            msg = consumer.poll(1.0)
-            
+            msg = consumer.poll(timeout=1.0)
+
             if msg is None:
                 continue
             if msg.error():
-                print(f"Consumer error: {msg.error()}")
+                if msg.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                print(f"Stream Broker Error: {msg.error()}")
                 continue
 
-            # Latency Profiling: Initialize tracking anchor before execution transformations
-            start_time = time.time()
+            loop_start = time.time()
 
-            # Deserialization Stage: Decode raw binary byte sequence blocks back into structured JSON Python representations
-            data = json.loads(msg.value().decode('utf-8'))
-            
-            # Streaming In-Flight Enrichment: Apply text processing logic to deduce a sentiment score component
-            score = TextBlob(data['headline']).sentiment.polarity
-            
-            # Data Integrity Architecture Rule (Exactly-Once Semantics):
-            # Implements an Idempotent UPSERT strategy using 'ON CONFLICT (article_id) DO NOTHING'.
-            # Eliminates duplicate database record creations from network retries or message re-deliveries.
-            insert_query = """
-                INSERT INTO news_sentiment (article_id, headline, sentiment_score, event_timestamp)
-                VALUES (%s, %s, %s, %s)
-                ON CONFLICT (article_id) DO NOTHING;
-            """
-            cur.execute(insert_query, (data['id'], data['headline'], score, data['timestamp']))
-            conn.commit() # Atomic transaction flush to persistent storage disk partitions
+            try:
+                # 1. Pydantic schema validation
+                raw_payload = json.loads(msg.value().decode('utf-8'))
+                validated_data = ArticlePayload(**raw_payload)
 
-            end_time = time.time()
-            
-            # Observability & Metrics Logging: Profile ingestion performance speeds up to 4 decimal places
-            print(f"Stored article {data['id']} | Score: {score:.2f} | Latency: {end_time - start_time:.4f} seconds")
+                # 2. Accumulate batch for GE checkpoint
+                ge_batch.append(raw_payload)
+                if len(ge_batch) >= GE_BATCH_SIZE:
+                    passed = run_ge_checkpoint(ge_batch)
+                    if not passed:
+                        print(f"[GE] Batch failed contracts — skipping batch.")
+                        ge_batch = []
+                        continue
+                    ge_batch = []
+
+                # 3. FinBERT inference
+                inference_start = time.time()
+                nlp_res = sentiment_pipeline(validated_data.headline)[0]
+                inference_end = time.time()
+
+                label_mapping = {'positive': 1.0, 'negative': -1.0, 'neutral': 0.0}
+                score = label_mapping[nlp_res['label']] * nlp_res['score']
+                inference_ms = (inference_end - inference_start) * 1000
+
+                # 4. Idempotent PostgreSQL write
+                insert_query = """
+                    INSERT INTO news_sentiment (article_id, headline, sentiment_score, event_timestamp)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (article_id, event_timestamp) DO NOTHING;
+                """
+                cur.execute(insert_query, (validated_data.id, validated_data.headline, score, validated_data.timestamp))
+                conn.commit()
+
+                # 5. Manual offset commit — exactly-once delivery
+                consumer.commit(msg, asynchronous=True)
+
+                loop_end = time.time()
+                total_latency_ms = (loop_end - loop_start) * 1000
+
+                # 6. Adaptive backpressure
+                if total_latency_ms > 200:
+                    print(f"[BACKPRESSURE WARNING] Loop latency hit {total_latency_ms:.2f}ms. Throttling.")
+                    time.sleep(0.05)
+
+                print(f"Sync ID: {validated_data.id} | Compute Latency: {inference_ms:.2f}ms | Loop Latency: {total_latency_ms:.2f}ms | Score: {score:.2f}")
+
+            except ValidationError as val_err:
+                print(f"Malformed stream schema encountered, bypassing record: {val_err}")
+                continue
 
     except KeyboardInterrupt:
         pass
     finally:
-        # Resource Teardown Protocol: Close connections gracefully to clean up lingering file handlers and process contexts
         consumer.close()
         cur.close()
         conn.close()
