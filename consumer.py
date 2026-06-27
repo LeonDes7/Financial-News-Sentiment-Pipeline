@@ -7,6 +7,7 @@ from confluent_kafka import Consumer, KafkaError
 from transformers import pipeline
 from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError
+import great_expectations as gx
 
 load_dotenv()
 
@@ -30,46 +31,47 @@ sentiment_pipeline = pipeline(
     device=-1
 )
 
+# Build GE context, suite, and batch definition once at startup
+_ge_context = gx.get_context(mode="ephemeral")
+_ge_data_source = _ge_context.data_sources.add_pandas("kafka_ingestion")
+_ge_asset = _ge_data_source.add_dataframe_asset(name="article_batch")
+_ge_batch_def = _ge_asset.add_batch_definition_whole_dataframe("kafka_batch")
+
+_ge_suite = _ge_context.suites.add(
+    gx.core.expectation_suite.ExpectationSuite(name="kafka_article_contracts")
+)
+_ge_suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="id"))
+_ge_suite.add_expectation(gx.expectations.ExpectColumnValuesToNotBeNull(column="headline"))
+_ge_suite.add_expectation(gx.expectations.ExpectColumnValuesToBeBetween(column="timestamp", min_value=0))
+_ge_suite.add_expectation(gx.expectations.ExpectColumnValuesToBeUnique(column="id"))
+_ge_suite.add_expectation(gx.expectations.ExpectColumnValueLengthsToBeBetween(column="headline", min_value=1))
+
+_ge_validation_def = _ge_context.validation_definitions.add(
+    gx.ValidationDefinition(
+        name="kafka_batch_validation",
+        data=_ge_batch_def,
+        suite=_ge_suite,
+    )
+)
+
 def run_ge_checkpoint(records: list[dict]) -> bool:
     """
-    Enforces 5 Great Expectations-style data contracts on a batch of
-    raw Kafka ingestion records before PostgreSQL loading.
+    Runs Great Expectations data contracts on a batch of raw Kafka records.
+    Enforces 5 schema expectations before PostgreSQL ingestion.
     """
     try:
         df = pd.DataFrame(records)
-        violations = []
-
-        # Contract 1: id must never be null
-        if df["id"].isnull().any():
-            violations.append("expect_column_values_to_not_be_null: id")
-
-        # Contract 2: headline must never be null
-        if df["headline"].isnull().any():
-            violations.append("expect_column_values_to_not_be_null: headline")
-
-        # Contract 3: timestamp must be a positive integer
-        if (df["timestamp"] < 0).any():
-            violations.append("expect_column_values_to_be_between: timestamp >= 0")
-
-        # Contract 4: id must be unique within batch
-        if df["id"].duplicated().any():
-            violations.append("expect_column_values_to_be_unique: id")
-
-        # Contract 5: headline must be non-empty string
-        if (df["headline"].str.len() < 1).any():
-            violations.append("expect_column_value_lengths_to_be_between: headline >= 1")
-
-        if violations:
-            print(f"[GE CONTRACT VIOLATION] {len(violations)} expectation(s) failed:")
-            for v in violations:
-                print(f"  - {v}")
+        result = _ge_validation_def.run(batch_parameters={"dataframe": df})
+        if not result["success"]:
+            failed = [r for r in result["results"] if not r["success"]]
+            print(f"[GE CONTRACT VIOLATION] {len(failed)} expectation(s) failed:")
+            for f in failed:
+                print(f"  - {f['expectation_config']['type']}")
             return False
-
         print(f"[GE CHECKPOINT] All 5 data contracts passed on batch of {len(records)}.")
         return True
-
     except Exception as e:
-        print(f"[GE ERROR] Validation failed with exception: {e}")
+        print(f"[GE ERROR] Validation failed: {e}")
         return False
 
 def get_db_connection():
